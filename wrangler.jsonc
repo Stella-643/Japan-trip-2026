@@ -1,0 +1,10 @@
+{
+  // Cloudflare Workers 静态网站配置（放在仓库根目录）
+  // name 必须和你在 Cloudflare 上的项目名一致
+  "name": "japan-trip-2026",
+  "compatibility_date": "2026-09-01",
+  // 网站文件所在目录："." 表示仓库根目录（即 index.html 所在的位置）
+  "assets": {
+    "directory": "."
+  }
+}
