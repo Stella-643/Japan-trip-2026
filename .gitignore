@@ -1,0 +1,12 @@
+# Python cache
+__pycache__/
+*.pyc
+.codebuddy/
+
+# Local assets not needed for deploy (Leaflet is inlined in the HTML)
+/assets/
+
+# Temp / debug artifacts
+*.png
+*.jpg
+icon_sample.html
