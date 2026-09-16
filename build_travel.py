@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """生成旅行安排 HTML v4（旅行手帐 · 暖色调）:
 - 统一单色线性 SVG 图标（景点=鸟居 / 交通=列车 / 住宿=床 / 餐饮=刀叉 / 出发=飞机）
-- Maps / 备注 / 备选餐厅 也用统一 SVG；地图标记改为纯色圆点（不堆图标）
+- Maps / 备注 / 备选餐厅 也用统一 SVG；地图标记=按天着色圆点+行程单同款线性图标
 - 倒计时实时计算，放进「今日重点」
 - 路线连线改蓝色实线
-- 新增 总览 tab（全程地图按天着色 + 每日关键）
+- 新增 总览 tab（每天只标一个关键点位，按天着色 + 每日关键）
 - 新增 酒店·机票 tab（可填信息 + 传截图，存浏览器本地）
 - 内联 Leaflet，免 CDN
 """
@@ -37,12 +37,16 @@ ICONS = {
     "ticket": '<path d="M3.5 8.5h17v2.2a1.8 1.8 0 0 0 0 3.6v2.2h-17v-2.2a1.8 1.8 0 0 0 0-3.6z"/><path d="M14 8.5v8"/>',
     "bag": '<rect x="5" y="7" width="14" height="13.5" rx="3"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/><path d="M9.5 11.5v5"/><path d="M14.5 11.5v5"/>',
     "shop": '<path d="M4 9h16l1.5-4.4L18 4H6L2.5 4.6z"/><path d="M4 9v10h16V9"/><path d="M9.5 19v-6h5v6"/>',
+    "stamp": '<rect x="9.5" y="3" width="5" height="3" rx="1"/><path d="M12 6v3"/><path d="M6 9h12v4H6z"/><path d="M5 21h14"/><path d="M9 17h6"/>',
 }
 
 
 def svg(key):
     return (f'<svg class="isc" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
             f'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">{ICONS[key]}</svg>')
+
+
+# ======================= 纸纹底（内联，离线可用） =======================
 
 
 def maps_url(place):
@@ -80,7 +84,7 @@ def render_item(it, period):
             f'{note}{tag}{backup}</div></div>')
 
 
-def day_markers(sections_data):
+def day_markers(sections_data, pid):
     out, seen = [], set()
     for period, items in sections_data:
         for it in items:
@@ -92,7 +96,8 @@ def day_markers(sections_data):
             seen.add(key)
             out.append({"lat": it["coord"][0], "lng": it["coord"][1],
                         "name": it["title"], "url": maps_url(it["place"]),
-                        "color": COLOR[period]})
+                        "color": DAY_COLOR.get(pid, "#7E6BC0"),
+                        "icon": svg_mark(it["icon"])})
     return out
 
 
@@ -138,7 +143,9 @@ def render_panel(pid, info):
         return f'<section class="panel" id="{pid}">{head}{inner}</section>'
     mapcard = ""
     if pid in map_data:
-        mapcard = (f'<div class="card mapwrap"><div class="mapcard-title">{svg("route")}<span>今日路线</span></div>'
+        mapcard = (f'<div class="card mapwrap">'
+                   f'<div class="mapcard-title">{svg("route")}<span>今日路线</span></div>'
+                   f'{MAP_LEGEND}'
                    f'<div class="map" id="map-{pid}"><div class="mfb">地图加载中…<br>若长时间空白，请用系统自带浏览器（Safari / Chrome）打开本页</div></div></div>')
     return f'<section class="panel" id="{pid}">{head}{mapcard}{render_focus(info.get("focus"), cd_html)}{render_lines(info["sections"])}</section>'
 
@@ -170,11 +177,42 @@ COORDS = {
     "秋叶原": (35.6995, 139.7717), "银座": (35.6717, 139.7650),
     "富士山": (35.3606, 138.7274), "西洋美术馆": (35.7171, 139.7731),
     "city walk": (35.7171, 139.7731), "东京": (35.6762, 139.6503),
+    # —— 以下为按新模板补全的地名（含日文/英文写法）——
+    "心斎橋": (34.6687, 135.5017),          # 心斋桥（日文写法）
+    "阪急": (34.7053, 135.4983),            # 阪急梅田总店 / 阪急三号街
+    "LUCUA": (34.7026, 135.4952),           # LUCUA 大阪（大阪站）
+    "北新地": (34.6975, 135.4920),          # 元祖油堂 北新地店
+    "Doutonbori": (34.6682, 135.5012), "Dotonbori": (34.6682, 135.5012),  # 道顿堀（两种罗马音，覆盖 ABURIYA / Glico）
+    "Shibuya": (35.6595, 139.6995),         # 涩谷（覆盖 Tower Records / Parco / Sky / Crossing）
+    "Delimmo": (35.6717, 139.7650),         # Delimmo 银座
+    "TOKYO": (35.6812, 139.7671),           # 东京站（英文写法，覆盖 THE STANDARD BAKERS TOKYO）
+    "成田": (35.7720, 140.3929),            # 成田机场 T2
+    "銀座": (35.6717, 139.7650),            # 银座（日文写法，覆盖 OLD DELHI 銀座店）
+    "カムイ": (35.6958, 139.7733), "KAMUI": (35.6958, 139.7733),  # スープカレーカムイ 本店（千代田区神田須田町2-3-24，秋叶原/岩本町）
 }
 # 当天无任何坐标时的城市兜底点（避免地图空白）
 CITY_FALLBACK = {"d1": (34.6937, 135.5023), "d2": (34.9949, 135.7850), "d3": (34.7053, 135.4983),
                  "d4": (34.6654, 135.4322), "d5": (35.6580, 139.6963), "d6": (35.7148, 139.7967),
                  "d7": (35.3606, 138.7274), "d8": (35.7171, 139.7731), "d9": (35.6762, 139.6503)}
+
+# 类型图标（地图标记内与行程单用同一套线性 SVG）
+def svg_mark(key):
+    return (f'<svg class="isc" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+            f'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+            f'{ICONS.get(key, ICONS["maps"])}</svg>')
+
+
+# 地图图例：与标记内的图标一致
+MAP_LEGEND = ('<div class="map-legend">'
+              + "".join(f'<span>{svg(k)}<b>{lab}</b></span>' for k, lab in
+                        [("food", "餐厅"), ("sight", "景点"), ("shop", "购物"),
+                         ("transit", "交通"), ("stay", "酒店"), ("flight", "航班")])
+              + '</div>')
+
+# 总览「每天只标一个关键点位」：先按关键词命中，命中不到则取当天第一个景点/购物点
+DAY_KEY = {"d1": "心斎橋", "d2": "伏见稻荷", "d3": "梅田", "d4": "Nintendo World",
+           "d5": "Shibuya Sky", "d6": "浅草寺", "d7": "富士山", "d8": "西洋美术馆", "d9": "成田"}
+
 
 
 def coord_for(title):
@@ -211,16 +249,32 @@ def fmt_time(v):
     return f"{int(m.group(1)):02d}:{m.group(2)}" if m else (s or None)
 
 
+def norm_date(v):
+    """兼容 Excel 中「真正的日期」与「被存成文本的日期」两种情况。"""
+    if isinstance(v, datetime.datetime):
+        return v
+    if isinstance(v, datetime.date):
+        return datetime.datetime(v.year, v.month, v.day)
+    s = str(v).strip()
+    for fmt in ("%Y/%m/%d", "%Y-%m-%d", "%Y.%m.%d", "%Y/%m/%d %H:%M:%S", "%Y-%m-%d %H:%M:%S"):
+        try:
+            return datetime.datetime.strptime(s, fmt)
+        except ValueError:
+            continue
+    return None
+
+
 def build_days(path):
     wb = openpyxl.load_workbook(path, data_only=True)
     ws = wb["D1-D9行程"]
     out = {}
     for r in ws.iter_rows(values_only=True):
-        if not isinstance(r[0], datetime.datetime):
-            continue  # 跳过表头
+        date_v = norm_date(r[0])
+        if date_v is None:
+            continue  # 跳过表头 / 非日期行
         if not any(c is not None and str(c).strip() != "" for c in r[:5]):
             continue
-        date_v, dayid, period_v, type_v, activity = r[0], r[1], r[2], r[3], r[4]
+        dayid, period_v, type_v, activity = r[1], r[2], r[3], r[4]
         ktime, percap, note, gmaps, key_v, cd_v, backup = r[5], r[6], r[7], r[8], r[9], r[10], r[11]
         pid = str(dayid).strip().lower()
         if pid not in out:
@@ -228,7 +282,7 @@ def build_days(path):
             wd = WD[date_v.weekday()]
             out[pid] = {"label": f"{dayid}｜{THEME.get(pid, '')}", "date": iso.replace("-", "."),
                         "wd": wd, "iso": iso,
-                        "cdlabel": f"{dayid}（{iso[5:].replace('-', '/')} {wd[:2]}）",
+                        "cdlabel": f"{dayid}（{iso[5:].replace('-', '/')} {wd}）",
                         "sections": {"morning": [], "afternoon": [], "night": []}, "focus": []}
         period = PERIOD.get(str(period_v).strip(), "morning")
         icon = TYPE_ICON.get(str(type_v).strip(), "sight")
@@ -276,15 +330,31 @@ for pid, info in days.items():
 
 # ======================= 总览 =======================
 def overview_markers():
+    """总览只标「每天最重要的一个点位」：关键词命中优先，其次当天第一个景点/购物点。"""
     out = []
     for pid, info in days.items():
-        for period, items in info.get("sections") or []:
-            for it in items:
-                if not it.get("coord"):
-                    continue
-                out.append({"lat": it["coord"][0], "lng": it["coord"][1],
-                            "name": it["title"], "url": maps_url(it["place"]),
-                            "color": DAY_COLOR[pid]})
+        located = [it for _p, items in (info.get("sections") or []) for it in items if it.get("coord")]
+        pick = None
+        kw = DAY_KEY.get(pid)
+        if kw:
+            pick = next((it for it in located if kw in it["title"] and it["icon"] != "transit"), None)
+            if pick is None:
+                pick = next((it for it in located if kw in it["title"]), None)
+        if pick is None:
+            pick = next((it for it in located if it["icon"] in ("sight", "shop")), None)
+        if pick is None and located:
+            pick = located[0]
+        if pick is not None:
+            lat, lng = pick["coord"]
+            name, url = pick["title"], maps_url(pick["place"])
+        elif pid in CITY_FALLBACK:
+            lat, lng = CITY_FALLBACK[pid]
+            name, url = THEME.get(pid, pid), maps_url(THEME.get(pid, pid))
+        else:
+            continue
+        out.append({"lat": lat, "lng": lng, "name": name, "url": url,
+                    "color": DAY_COLOR.get(pid, "#7E6BC0"),
+                    "icon": svg_mark(pick["icon"] if pick else "maps")})
     return out
 
 
@@ -292,14 +362,16 @@ ov_items = ""
 for pid, info in days.items():
     dot = f'<span class="ov-dot" style="background:{DAY_COLOR[pid]}"></span>'
     ov_items += (f'<div class="ov-item">{dot}'
-                 f'<span class="ov-date">{info["date"]} {info["wd"][:2]}</span>'
+                 f'<span class="ov-date">{info["date"]} {info["wd"]}</span>'
                  f'<span class="ov-label">{info["label"]}</span></div>')
 
 overview_panel = (
     f'<section class="panel" id="overview">'
     f'<div class="dayhead"><div class="dh-label">{svg("globe")}<span>全程总览</span></div>'
     f'<div class="dh-date">{svg("calendar")}<span>2026.10.31 – 11.08 · 9天8晚</span></div></div>'
-    f'<div class="card mapwrap"><div class="mapcard-title">{svg("route")}<span>全程路线（按天着色）</span></div>'
+    f'<div class="card mapwrap">'
+    f'<div class="mapcard-title">{svg("route")}<span>全程路线</span></div>'
+    f'{MAP_LEGEND}'
     f'<div class="map" id="map-overview"><div class="mfb">地图加载中…<br>若长时间空白，请用系统自带浏览器（Safari / Chrome）打开本页</div></div></div>'
     f'<div class="card"><div class="focus-title">{svg("calendar")}<span>每日关键</span></div><div class="ov-list">{ov_items}</div></div>'
     f'</section>'
@@ -308,11 +380,11 @@ overview_panel = (
 # ======================= 地图数据（各天 + 总览） =======================
 map_data = {"overview": {"markers": overview_markers()}}
 for _pid, _info in days.items():
-    _mk = day_markers(_info["sections"])
+    _mk = day_markers(_info["sections"], _pid)
     if not _mk and _pid in CITY_FALLBACK:
         _mk = [{"lat": CITY_FALLBACK[_pid][0], "lng": CITY_FALLBACK[_pid][1],
                 "name": THEME.get(_pid, _pid), "url": maps_url(THEME.get(_pid, _pid)),
-                "color": COLOR["morning"]}]
+                "color": DAY_COLOR.get(_pid, "#7E6BC0"), "icon": svg_mark("maps")}]
     if _mk:
         map_data[_pid] = {"markers": _mk}
 
@@ -372,7 +444,7 @@ checklist_groups_raw = [
 ]
 chk_html = ""
 chk_index = 0
-for gicon, g, items in checklist_groups_raw:
+for gi, (gicon, g, items) in enumerate(checklist_groups_raw):
     lis = ""
     for i in items:
         key = "c" + str(chk_index)
@@ -386,11 +458,53 @@ checklist_panel = (f'<section class="panel" id="checklist">'
                    f'<div class="dayhead"><div class="dh-label">{svg("check")}<span>出行 Checklist</span></div>'
                    f'<div class="dh-date">{svg("calendar")}<span>出发前逐项核对</span></div></div>{chk_html}</section>')
 
+# ============ 盖章攻略 ============
+# 数据：(城市, 图标, [(地点, 楼层/位置, 章类型), ...])
+stamp_cities = [
+    ("大阪", "shop", [
+        ("心斋桥PARCO", "6F", "Chiikawa land"),
+        ("心斋桥大丸百货", "9F", "Jumpshop"),
+        ("USJ", "检票后 customer service", "纪念章"),
+        ("阪急三番街 北馆", "B1F–1F", "Kiddy land"),
+        ("阪急三番街 南馆", "B1F", "Chiikawa land"),
+    ]),
+    ("京都", "sight", [
+        ("伏见稻荷", "", "Chiikawa"),
+        ("四条河原町", "", "Chiikawa"),
+    ]),
+    ("东京", "globe", [
+        ("浅草寺 游客中心", "1F", "纪念章"),
+        ("新宿", "", "Chiikawa land"),
+    ]),
+]
+stamp_index = 0
+stamp_html = ""
+for city, cicon, items in stamp_cities:
+    lis = ""
+    for name, where, stamp in items:
+        key = "s" + str(stamp_index)
+        stamp_index += 1
+        lis += (f'<li class="stamp-item"><label><input type="checkbox" data-key="{key}">'
+                f'<span class="stamp-body"><span class="stamp-name">{name}</span>'
+                f'<span class="stamp-meta">'
+                + (f'<span class="stamp-where">{where}</span>' if where else "")
+                + f'<span class="stamp-tag">{stamp}</span></span>'
+                f'</span></label></li>')
+    stamp_html += (f'<div class="card chk-group"><div class="chk-gtitle">{svg(cicon)}<span>{city}</span></div>'
+                   f'<ul class="stamp-list">{lis}</ul></div>')
+stamp_panel = (f'<section class="panel" id="stamp">'
+               f'<div class="dayhead"><div class="dh-label">{svg("stamp")}<span>盖章攻略</span></div>'
+               f'<div class="dh-date">{svg("maps")}<span>按城市收集，勾选已盖的章会自动保存</span></div></div>'
+               f'<div class="chk-head"><div class="chk-count" id="stampCount">已盖章 0 / {stamp_index}</div>'
+               f'<button class="chk-reset" id="stampReset">清除全部</button></div>'
+               f'{stamp_html}</section>')
+
 # ============ 组装 ============
 tab_defs = [("overview", "总览", "globe"), ("d1", "D1", None), ("d2", "D2", None), ("d3", "D3", None),
             ("d4", "D4", None), ("d5", "D5", None), ("d6", "D6", None), ("d7", "D7", None),
             ("d8", "D8", None), ("d9", "D9", None),
-            ("hotel", "酒店·机票", "stay"), ("checklist", "Checklist", "check")]
+            ("hotel", "酒店·机票", "stay"), ("checklist", "Checklist", "check"),
+            ("stamp", "盖章攻略", "stamp")]
 tabs = "".join(
     f'<button class="tab{" active" if pid == "overview" else ""}" data-day="{pid}">'
     f'{(svg(ic) if ic else "")}<span>{name}</span></button>'
@@ -402,6 +516,7 @@ for pid, info in days.items():
     panels.append(render_panel(pid, info))
 panels.append(hotel_panel)
 panels.append(checklist_panel)
+panels.append(stamp_panel)
 panels_html = "".join(panels).replace(
     '<section class="panel" id="overview">', '<section class="panel active" id="overview">', 1)
 
@@ -513,12 +628,37 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:"PingFang SC",-
 .check label:hover{background:#F1EDFA}
 .check input{width:20px;height:20px;accent-color:var(--accent);flex:0 0 auto}
 .check label.done{color:#9A96A8;text-decoration:line-through}
-.pin2{width:16px;height:16px;border-radius:50%;background:var(--c,#59478C);border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.45)}
+.stamp-list{list-style:none;padding:0;margin:0}
+.stamp-item{padding:9px 2px;border-bottom:1px dashed var(--hair)}
+.stamp-item:last-child{border-bottom:none}
+.stamp-item label{display:flex;align-items:flex-start;gap:11px;cursor:pointer;padding:3px 4px;border-radius:10px}
+.stamp-item label:hover{background:#F1EDFA}
+.stamp-item input{width:20px;height:20px;accent-color:var(--accent);flex:0 0 auto;margin-top:2px}
+.stamp-body{flex:1;min-width:0}
+.stamp-name{font-size:16px;font-weight:700;display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;line-height:1.5}
+.stamp-meta{margin-top:4px;display:flex;gap:8px;flex-wrap:wrap;font-size:13px;align-items:center}
+.stamp-where{color:var(--sub)}
+.stamp-tag{color:#fff;background:var(--blue);padding:1px 10px;border-radius:999px;font-size:12px;font-weight:600}
+.stamp-item label.done .stamp-name{color:#9A96A8;text-decoration:line-through}
+.pin{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;border:2.5px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.42);background:var(--c,#59478C)}
+.pin .isc{width:15px;height:15px;color:#fff}
+.map-legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11.5px;color:var(--sub);margin-top:8px}
+.map-legend span{display:inline-flex;align-items:center;gap:4px}
+.map-legend .isc{width:14px;height:14px;color:var(--blue)}
+.map-legend b{font-weight:600;color:var(--sub)}
 .leaflet-popup-content{font-family:"PingFang SC",-apple-system,sans-serif;font-size:13px}
 .leaflet-popup-content a{color:var(--blue);font-weight:700;text-decoration:none;display:inline-flex;align-items:center;gap:4px}
 .leaflet-popup-content a svg{width:14px;height:14px}
 .leaflet-control-layers-toggle{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%2359478C' stroke-width='2' stroke-linejoin='round'%3E%3Cpolygon points='12 2 2 7 12 12 22 7 12 2'/%3E%3Cpolyline points='2 17 12 22 22 17'/%3E%3Cpolyline points='2 12 12 17 22 12'/%3E%3C/svg%3E");background-size:20px 20px;background-position:center;background-repeat:no-repeat}
 .leaflet-control-zoom a{color:#59478C;font-weight:700}
+/* ===== 手账装饰：纸纹 / 胶带 / 贴纸 ===== */
+body{background-color:#F7F6FB;
+  background-image:radial-gradient(rgba(120,100,170,.07) 1px, transparent 1.4px), radial-gradient(rgba(120,100,170,.07) 1px, transparent 1.4px);
+  background-size:23px 23px, 23px 23px; background-position:0 0, 11px 11px}
+.container{position:relative}
+.panel{position:relative}
+.card{position:relative}
+.card::after{content:'';position:absolute;inset:7px;border:1.6px dashed rgba(126,107,192,.20);border-radius:16px;pointer-events:none}
 """
 
 JS = """
@@ -580,8 +720,8 @@ function initMap(id){
     cfg.markers.forEach(function(m){
       var la = m.lat, ln = m.lng;
       if(gcj){ var c = wgs2gcj(la, ln); la = c[0]; ln = c[1]; }
-      var icon = L.divIcon({className:'', html:'<div class="pin2" style="--c:'+m.color+'"></div>',
-        iconSize:[16,16], iconAnchor:[8,8], popupAnchor:[0,-12]});
+      var icon = L.divIcon({className:'', html:'<div class="pin" style="background:'+m.color+'">'+(m.icon||'')+'</div>',
+        iconSize:[26,26], iconAnchor:[13,13], popupAnchor:[0,-15]});
       L.marker([la,ln],{icon:icon}).addTo(ov)
         .bindPopup('<b>'+m.name+'</b><br><a href="'+m.url+'" target="_blank" rel="noopener">'+LOC+' Maps</a>');
       pts.push([la,ln]);
@@ -709,6 +849,35 @@ setInterval(paintCountdowns, 60000);
 })();
 
 (function(){
+  var KEY='jp_stamp_v2';
+  var saved={};
+  try{ saved=JSON.parse(localStorage.getItem(KEY)||'{}'); }catch(e){}
+  var boxes=document.querySelectorAll('.stamp-list input[type=checkbox]');
+  function refresh(){
+    var done=0; boxes.forEach(function(b){ if(b.checked) done++; });
+    var c=document.getElementById('stampCount'); if(c){ c.textContent='已盖章 '+done+' / '+boxes.length; }
+  }
+  boxes.forEach(function(b){
+    var k=b.getAttribute('data-key');
+    if(saved[k]) b.checked=true;
+    if(b.checked) b.closest('label').classList.add('done');
+    b.addEventListener('change', function(){
+      saved[k]=b.checked;
+      b.closest('label').classList.toggle('done', b.checked);
+      try{ localStorage.setItem(KEY, JSON.stringify(saved)); }catch(e){}
+      refresh();
+    });
+  });
+  refresh();
+  var rst=document.getElementById('stampReset');
+  if(rst){ rst.addEventListener('click', function(){
+    boxes.forEach(function(b){ b.checked=false; b.closest('label').classList.remove('done'); saved[b.getAttribute('data-key')]=false; });
+    try{ localStorage.setItem(KEY, JSON.stringify(saved)); }catch(e){}
+    refresh();
+  }); }
+})();
+
+(function(){
   var KEY='jp_trip_docs_v1';
   var data={}; try{ data=JSON.parse(localStorage.getItem(KEY)||'{}'); }catch(e){}
   function save(){ try{ localStorage.setItem(KEY, JSON.stringify(data)); }catch(e){} }
@@ -740,7 +909,7 @@ DOC = """<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8">
 <title>大阪东京9天8晚｜旅行安排</title>
 <style>__LEAFLET_CSS__</style>
 <style>__CSS__</style>
-</head><body><div class="container"><div class="topbar"><h1>大阪东京 9天8晚</h1><div class="trip-sub">2026.10.31 – 11.08 · D1–D9</div></div><noscript><div class="njs"><b>提示：</b>本页需要开启 JavaScript 才能显示地图、倒计时、清单和上传。如果你在 App 的内嵌预览里看到地图空白，请点右上角「分享 / 用浏览器打开」，改用手机自带浏览器（Safari / Chrome）打开本文件。</div></noscript><div class="tabs">__TABS__</div>__PANELS__</div>
+</head><body><div class="container"><div class="topbar"><h1>大阪東京 9天8晚</h1><div class="trip-sub">2026.10.31 – 11.08 · D1–D9</div>__PLANE__</div><noscript><div class="njs"><b>提示：</b>本页需要开启 JavaScript 才能显示地图、倒计时、清单和上传。如果你在 App 的内嵌预览里看到地图空白，请点右上角「分享 / 用浏览器打开」，改用手机自带浏览器（Safari / Chrome）打开本文件。</div></noscript><div class="tabs">__TABS__</div>__PANELS__</div>
 <script>__LEAFLET_JS__</script>
 <script>__JS__</script>
 </body></html>"""
@@ -751,7 +920,8 @@ html = (DOC
         .replace("__CSS__", CSS)
         .replace("__TABS__", tabs)
         .replace("__PANELS__", panels_html)
-        .replace("__JS__", JS.replace("__MAPDATA__", map_json)))
+        .replace("__JS__", JS.replace("__MAPDATA__", map_json))
+        .replace("__PLANE__", ""))
 
 with open("/workspace/travel_plan.html", "w", encoding="utf-8") as f:
     f.write(html)
@@ -760,7 +930,7 @@ with open("/workspace/index.html", "w", encoding="utf-8") as f:
     f.write(html)
 print("OK bytes=", len(html))
 print("tabs=", len(tab_defs))
-print("d2 markers=", len(map_data["d2"]["markers"]))
+print("d2 markers=", len(map_data.get("d2", {}).get("markers", [])))
 print("overview markers=", len(map_data["overview"]["markers"]))
 print("backup blocks=", html.count('class="bk-label"'))
 print("svg icons=", html.count('class="isc"'))
