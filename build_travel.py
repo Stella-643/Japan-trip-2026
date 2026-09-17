@@ -86,6 +86,14 @@ def render_item(it, period):
 
 def day_markers(sections_data, pid):
     out, seen = [], set()
+    # 酒店作为当天第一站（连线起点）
+    hk = DAY_HOTEL.get(pid)
+    if hk:
+        hname, hlat, hlng = HOTELS[hk]
+        out.append({"lat": hlat, "lng": hlng, "name": hname + "（酒店）",
+                    "url": maps_url(hname), "color": DAY_COLOR.get(pid, "#7E6BC0"),
+                    "icon": svg_mark("stay")})
+        seen.add((round(hlat, 5), round(hlng, 5)))
     for period, items in sections_data:
         for it in items:
             if not it.get("coord"):
@@ -176,7 +184,7 @@ COORDS = {
     "涩谷": (35.6595, 139.6995), "浅草寺": (35.7148, 139.7967),
     "秋叶原": (35.6995, 139.7717), "银座": (35.6717, 139.7650),
     "富士山": (35.3606, 138.7274), "西洋美术馆": (35.7171, 139.7731),
-    "city walk": (35.7171, 139.7731), "东京": (35.6762, 139.6503),
+    "city walk": (35.7171, 139.7731), "东京": (35.6812, 139.7671),  # 东京站（兜底；原先偏西到初台，已修正）
     # —— 以下为按新模板补全的地名（含日文/英文写法）——
     "心斎橋": (34.6687, 135.5017),          # 心斋桥（日文写法）
     "阪急": (34.7053, 135.4983),            # 阪急梅田总店 / 阪急三号街
@@ -186,6 +194,7 @@ COORDS = {
     "Shibuya": (35.6595, 139.6995),         # 涩谷（覆盖 Tower Records / Parco / Sky / Crossing）
     "Delimmo": (35.6717, 139.7650),         # Delimmo 银座
     "TOKYO": (35.6812, 139.7671),           # 东京站（英文写法，覆盖 THE STANDARD BAKERS TOKYO）
+    "东京站": (35.6812, 139.7671),           # 东京站（修复：原被"东京"兜底截胡，导致偏西约10km）
     "成田": (35.7720, 140.3929),            # 成田机场 T2
     "銀座": (35.6717, 139.7650),            # 银座（日文写法，覆盖 OLD DELHI 銀座店）
     "カムイ": (35.6958, 139.7733), "KAMUI": (35.6958, 139.7733),  # スープカレーカムイ 本店（千代田区神田須田町2-3-24，秋叶原/岩本町）
@@ -213,10 +222,20 @@ MAP_LEGEND = ('<div class="map-legend">'
 DAY_KEY = {"d1": "心斎橋", "d2": "伏见稻荷", "d3": "梅田", "d4": "Nintendo World",
            "d5": "Shibuya Sky", "d6": "浅草寺", "d7": "富士山", "d8": "西洋美术馆", "d9": "成田"}
 
+# 酒店坐标（站旁，用于单日地图「每天第一站」）
+HOTELS = {
+    "osaka": ("相铁 FRESA INN 北滨", 34.6915, 135.5048),
+    "tokyo": ("相铁 FRESA INN 日本桥茅场町", 35.6802, 139.7772),
+}
+# 哪些天以酒店作为单日地图的第一站（D1 到达日只标机场；D5 未要求）
+DAY_HOTEL = {"d1": "osaka", "d2": "osaka", "d3": "osaka", "d4": "osaka",
+             "d6": "tokyo", "d7": "tokyo", "d8": "tokyo", "d9": "tokyo"}
+
 
 
 def coord_for(title):
-    for kw, c in COORDS.items():
+    # 最长关键词优先，避免短词（如"东京"）截胡更具体的（如"东京站"）
+    for kw, c in sorted(COORDS.items(), key=lambda kv: -len(kv[0])):
         if kw in title:
             return list(c)
     return None
@@ -352,9 +371,17 @@ def overview_markers():
             name, url = THEME.get(pid, pid), maps_url(THEME.get(pid, pid))
         else:
             continue
+        # 总览：圈内图标仅保留「飞机（航班）」，其余只显示纯色圆圈
         out.append({"lat": lat, "lng": lng, "name": name, "url": url,
                     "color": DAY_COLOR.get(pid, "#7E6BC0"),
-                    "icon": svg_mark(pick["icon"] if pick else "maps")})
+                    "icon": svg_mark(pick["icon"]) if (pick and pick["icon"] == "flight") else ""})
+        # 总览 D1 额外标注关西国际机场（飞机图标）
+        if pid == "d1":
+            ak = coord_for("关西机场")
+            if ak:
+                out.append({"lat": ak[0], "lng": ak[1], "name": "关西国际机场",
+                            "url": maps_url("关西国际机场"), "color": DAY_COLOR.get("d1"),
+                            "icon": svg_mark("flight")})
     return out
 
 
